@@ -47,8 +47,12 @@ assert.throws(() => validateConfigBoundaries({
 assert.throws(() => validateSlotContract({ ...contracts.desktop, adapter: 'Adapter.vue' }, 'desktop'), /exactly one/);
 assert.throws(() => resolveContainedPath(root, '../outside.json', 'fixture path'), /escapes/);
 const loaders = renderSlotLoaders(contracts, mobileFrontendContract);
+assert.match(loaders, /import \{ defineAsyncComponent \} from 'vue';/);
 assert.match(loaders, /slots\/desktop\/layout\.vue/);
 assert.match(loaders, /\.\.\/\.\.\/adapters\/Mobile\.vue/);
+assert.match(loaders, /desktop: defineAsyncComponent\(\(\) => import\('/);
+assert.match(loaders, /mobile: defineAsyncComponent\(\(\) => import\('/);
+assert.doesNotMatch(loaders, /^\s+(?:desktop|mobile): \(\) => import\(/m);
 assert.deepEqual(makeLicenseInventory(contracts).slots.mobile.license, 'GPL-2.0-or-later');
 
 const bootstrapSource = fs.readFileSync(path.join(root, 'tools', 'bootstrap.mjs'), 'utf8');
