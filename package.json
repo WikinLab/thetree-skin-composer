@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "name": "thetree-skin-composer",
+  "version": "0.1.0",
+  "description": "Engine-neutral desktop/mobile skin slot composer for the tree",
+  "type": "module",
+  "scripts": {
+    "preflight": "node tools/preflight.mjs",
+    "bootstrap": "node tools/bootstrap.mjs",
+    "refresh": "node tools/bootstrap.mjs --refresh",
+    "check": "node tools/contract-test.mjs"
+  },
+  "license": "MIT"
+}

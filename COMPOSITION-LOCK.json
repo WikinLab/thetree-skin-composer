@@ -1,0 +1,15 @@
+{
+  "schema": "thetree-skin-composition-lock/v1",
+  "slots": {
+    "desktop": {
+      "repository": "https://github.com/WikinLab/thetree-skin-vector.git",
+      "ref": "refs/heads/main",
+      "commit": "b8925c2b53989f522702f589e1b7e8edb66139f9"
+    },
+    "mobile": {
+      "repository": "https://github.com/WikinLab/thetree-skin-minerva.git",
+      "ref": "refs/heads/main",
+      "commit": "5a0bd962b31bde372b8f7cd8c473102e934b46ca"
+    }
+  }
+}

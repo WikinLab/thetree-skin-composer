@@ -1,0 +1,13 @@
+{
+  "schema": "thetree-skin-composition/v1",
+  "slots": {
+    "desktop": {
+      "repository": "https://github.com/WikinLab/thetree-skin-vector.git",
+      "ref": "refs/heads/main"
+    },
+    "mobile": {
+      "repository": "https://github.com/WikinLab/thetree-skin-minerva.git",
+      "ref": "refs/heads/main"
+    }
+  }
+}

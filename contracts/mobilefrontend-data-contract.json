@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "publicDataKey": "thetreeMobileFrontend",
+  "dataSchema": "thetree-mobilefrontend/v1",
+  "modeField": "mode",
+  "desktopMode": "desktop",
+  "mobileMode": "mobile"
+}
