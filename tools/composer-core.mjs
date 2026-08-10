@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const COMPOSITION_SCHEMA = 'thetree-skin-composition/v1';
+export const COMPOSITION_RESOLUTION_SCHEMA = 'thetree-skin-composition-resolution/v1';
 export const SLOT_CONTRACT_SCHEMA = 'thetree-skin-slot-contract/v1';
 export const SLOT_NAMES = Object.freeze(['desktop', 'mobile']);
 
@@ -29,6 +30,24 @@ export function validateComposition(composition) {
     assertString(value?.contract, `slots.${slot}.contract`);
   }
   return composition;
+}
+
+export function makeCompositionResolution(composition, resolveCommit) {
+  return {
+    schema: COMPOSITION_RESOLUTION_SCHEMA,
+    slots: Object.fromEntries(SLOT_NAMES.map((slot) => {
+      const source = composition.slots[slot];
+      const commit = resolveCommit(source.repository, source.ref);
+      if (!/^[0-9a-f]{40}$/.test(commit)) {
+        throw new Error(`Resolved ${slot} commit is not a full Git object id.`);
+      }
+      return [slot, {
+        repository: source.repository,
+        ref: source.ref,
+        commit
+      }];
+    }))
+  };
 }
 
 function assertRelativePath(value, label) {

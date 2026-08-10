@@ -12,11 +12,11 @@ cd thetree-skin-composer
 npm run bootstrap
 ```
 
-`bootstrap`이 `COMPOSITION-LOCK.json`에 잠긴 두 저장소를 가져오고 필요한 자식 준비 과정까지 실행합니다. 그 뒤에는 이 폴더를 하나의 더트리 스킨으로 취급하여 기존과 같은 엔진 빌드 과정을 실행합니다.
+`bootstrap`이 `COMPOSITION.json`에 선언된 두 저장소 ref의 최신 커밋을 가져오고 필요한 자식 준비 과정까지 실행합니다. 그 뒤에는 이 폴더를 하나의 더트리 스킨으로 취급하여 기존과 같은 엔진 빌드 과정을 실행합니다.
 
 모바일 슬롯 전환에는 [`thetree-plugin-mobilefrontend`](https://github.com/WikinLab/thetree-plugin-mobilefrontend)가 필요합니다. 플러그인이 없거나 데스크톱 요청이면 데스크톱 슬롯, 플러그인이 전달한 `thetree-mobilefrontend/v1` 신호가 `mobile`이면 모바일 슬롯을 사용합니다.
 
-업데이트할 때는 잠금 파일을 그대로 재현합니다.
+업데이트할 때도 같은 명령을 사용합니다. `bootstrap`을 실행할 때마다 슬롯 ref의 최신 커밋을 다시 확인합니다.
 
 ```sh
 git pull
@@ -45,15 +45,7 @@ npm run bootstrap
 }
 ```
 
-ref의 최신 커밋을 새로 잠글 때만 다음 명령을 사용합니다.
-
-```sh
-npm run refresh
-git add COMPOSITION.json COMPOSITION-LOCK.json contracts/slots
-git commit
-```
-
-일반 `bootstrap`은 최신 커밋을 조회하지 않고 추적된 잠금을 재사용합니다.
+`ref`는 브랜치나 태그처럼 `git ls-remote`로 단일 Git 객체를 해석할 수 있어야 합니다. 컴포저는 매 `bootstrap` 시작 시 각 ref를 한 번 해석하고, 그 실행 동안에는 해석된 정확한 커밋으로 슬롯을 준비합니다. 실제 사용한 저장소·ref·커밋은 생성 결과인 `.skin-composer/generated/composition-resolution.json`에서 확인할 수 있습니다.
 
 ## bootstrap 없는 네이티브 스킨
 
@@ -102,7 +94,7 @@ git commit
 
 ## 소스 설치와 배포 번들
 
-엔진을 수정하지 않고 자식 소스를 저장소에 커밋하지 않으므로, 소스에서 설치할 때는 엔진 빌드 전에 한 번의 `npm run bootstrap`이 필요합니다. 최종 사용자에게 기존 스킨과 같은 설치 경험을 제공하려면 잠긴 자식과 생성 결과를 포함한 Release 배포 번들을 만들 수 있으며, 그 결과물은 소스가 아니라 생성된 배포 산출물로 취급합니다.
+엔진을 수정하지 않고 자식 소스를 저장소에 커밋하지 않으므로, 소스에서 설치하거나 슬롯을 갱신할 때는 엔진 빌드 전에 `npm run bootstrap`이 필요합니다. 최종 사용자에게 기존 스킨과 같은 설치 경험을 제공하려면 특정 시점에 해석된 자식과 생성 결과를 포함한 Release 배포 번들을 만들 수 있으며, 그 결과물은 소스가 아니라 생성된 배포 산출물로 취급합니다.
 
 ## 라이선스
 

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  makeCompositionResolution,
   makeLicenseInventory,
   packageManagerScriptMatches,
   renderSlotLoaders,
@@ -26,6 +27,21 @@ assert.equal(resolveCompositionSlot({ thetreeMobileFrontend: { schema: 'unknown'
 assert.equal(packageManagerScriptMatches('npm', 'C:/runtime/npm-cli.js'), true);
 assert.equal(packageManagerScriptMatches('npm', 'C:/runtime/pnpm.cjs'), false);
 assert.equal(packageManagerScriptMatches('pnpm', 'C:/runtime/pnpm.cjs'), true);
+const resolvedRepositories = [];
+const resolution = makeCompositionResolution(composition, (repository, ref) => {
+  resolvedRepositories.push([repository, ref]);
+  return repository === composition.slots.desktop.repository
+    ? '1111111111111111111111111111111111111111'
+    : '2222222222222222222222222222222222222222';
+});
+assert.deepEqual(resolvedRepositories, [
+  [composition.slots.desktop.repository, composition.slots.desktop.ref],
+  [composition.slots.mobile.repository, composition.slots.mobile.ref]
+]);
+assert.equal(resolution.schema, 'thetree-skin-composition-resolution/v1');
+assert.equal(resolution.slots.desktop.commit, '1111111111111111111111111111111111111111');
+assert.equal(resolution.slots.mobile.commit, '2222222222222222222222222222222222222222');
+assert.throws(() => makeCompositionResolution(composition, () => 'main'), /full Git object id/);
 
 const contracts = {
   desktop: validateSlotContract({
@@ -64,6 +80,8 @@ const implementation = [
 ].join('\n');
 assert.doesNotMatch(implementation, /vector|minerva/i, 'Composer implementation must not know concrete skin names.');
 assert.doesNotMatch(implementation, /COMPOSABLE-SKIN/, 'Composer must not require changes in a child repository.');
+assert.doesNotMatch(bootstrapSource, /COMPOSITION-LOCK|--refresh/, 'Bootstrap must resolve current slot refs instead of consuming a tracked lock.');
+assert.match(bootstrapSource, /makeCompositionResolution\(composition, resolveHead\)/);
 assert.ok(
   bootstrapSource.indexOf('runSlotPrepare(slotRoot, contracts[slot])') < bootstrapSource.indexOf('const componentPath ='),
   'A preparation command must be allowed to generate the configured entry.'
