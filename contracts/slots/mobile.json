@@ -1,0 +1,21 @@
+{
+  "schema": "thetree-skin-slot-contract/v1",
+  "id": "minerva",
+  "entry": "components/MinervaVariantLayout.vue",
+  "contentSurface": "host",
+  "configNamespaces": [
+    "skin.minerva"
+  ],
+  "sharedConfigKeys": [
+    "wiki.logo_url",
+    "wiki.footer_text",
+    "wiki.lang",
+    "wiki.dir"
+  ],
+  "license": "GPL-2.0-or-later",
+  "prepare": [
+    "npm",
+    "run",
+    "bootstrap"
+  ]
+}

@@ -3,11 +3,13 @@
   "slots": {
     "desktop": {
       "repository": "https://github.com/WikinLab/thetree-skin-vector.git",
-      "ref": "refs/heads/main"
+      "ref": "refs/heads/main",
+      "contract": "contracts/slots/desktop.json"
     },
     "mobile": {
       "repository": "https://github.com/WikinLab/thetree-skin-minerva.git",
-      "ref": "refs/heads/main"
+      "ref": "refs/heads/main",
+      "contract": "contracts/slots/mobile.json"
     }
   }
 }

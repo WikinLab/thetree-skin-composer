@@ -6,11 +6,13 @@ import { fileURLToPath } from 'node:url';
 import {
   SLOT_NAMES,
   makeLicenseInventory,
+  packageManagerScriptMatches,
   readJson,
   renderSlotLoaders,
-  validateChildManifest,
+  resolveContainedPath,
   validateComposition,
   validateConfigBoundaries,
+  validateSlotContract,
   writeDeterministicJson
 } from './composer-core.mjs';
 
@@ -25,6 +27,7 @@ const refresh = process.argv.includes('--refresh');
 
 function run(command, args, cwd = root) {
   const result = spawnSync(command, args, { cwd, stdio: 'inherit', windowsHide: true, shell: false });
+  if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed with status ${result.status}.`);
 }
 
@@ -51,14 +54,21 @@ function cloneExact(repository, commit, target) {
   if (observed !== commit) throw new Error(`Checked out ${observed}, expected ${commit}.`);
 }
 
-function runChildBootstrap(slotRoot, manifest) {
-  const words = String(manifest.bootstrap || '').trim().split(/\s+/).filter(Boolean);
+function runSlotPrepare(slotRoot, contract) {
+  const words = contract.prepare || [];
   if (!words.length) return;
-  if (words[0] === 'npm' && process.env.npm_execpath) {
+  if (packageManagerScriptMatches(words[0], process.env.npm_execpath)) {
     run(process.execPath, [process.env.npm_execpath, ...words.slice(1)], slotRoot);
     return;
   }
   run(words[0], words.slice(1), slotRoot);
+}
+
+function assertHostContentSurface(componentPath, slot) {
+  const component = fs.readFileSync(componentPath, 'utf8');
+  if (!/<nuxt(?:\s|\/|>)/i.test(component)) {
+    throw new Error(`${slot} slot component does not expose the host <nuxt/> content surface.`);
+  }
 }
 
 const composition = validateComposition(readJson(compositionPath));
@@ -76,33 +86,38 @@ if (!lock || refresh) {
 }
 if (lock.schema !== 'thetree-skin-composition-lock/v1') throw new Error(`Unsupported composition lock ${lock.schema}.`);
 
-const manifests = {};
+const contracts = {};
 for (const slot of SLOT_NAMES) {
   const source = composition.slots[slot];
   const locked = lock.slots?.[slot];
   if (source.repository !== locked?.repository || source.ref !== locked?.ref || !/^[0-9a-f]{40}$/.test(locked?.commit || '')) {
     throw new Error(`${slot} lock does not match COMPOSITION.json.`);
   }
+  const contractPath = resolveContainedPath(root, source.contract, `${slot} contract path`);
+  if (!fs.existsSync(contractPath)) throw new Error(`${slot} slot contract is missing.`);
+  contracts[slot] = validateSlotContract(readJson(contractPath), slot);
   const slotRoot = path.join(slotsRoot, slot);
   cloneExact(locked.repository, locked.commit, slotRoot);
-  const manifestPath = path.join(slotRoot, 'COMPOSABLE-SKIN.json');
-  if (!fs.existsSync(manifestPath)) throw new Error(`${slot} child lacks COMPOSABLE-SKIN.json.`);
-  manifests[slot] = validateChildManifest(readJson(manifestPath), slot);
-  if (!fs.existsSync(path.join(slotRoot, manifests[slot].entry))) throw new Error(`${slot} child entry is missing.`);
-  runChildBootstrap(slotRoot, manifests[slot]);
+  runSlotPrepare(slotRoot, contracts[slot]);
+  const componentPath = contracts[slot].adapter
+    ? resolveContainedPath(root, contracts[slot].adapter, `${slot} slot adapter`)
+    : resolveContainedPath(slotRoot, contracts[slot].entry, `${slot} slot entry`);
+  if (!fs.existsSync(componentPath)) throw new Error(`${slot} slot component is missing after preparation.`);
+  assertHostContentSurface(componentPath, slot);
 }
 
-validateConfigBoundaries(manifests);
+validateConfigBoundaries(contracts);
 fs.mkdirSync(generatedOutput, { recursive: true });
-fs.writeFileSync(path.join(generatedOutput, 'slot-loaders.js'), renderSlotLoaders(manifests, mobileFrontendContract));
-writeDeterministicJson(path.join(generatedOutput, 'license-inventory.json'), makeLicenseInventory(manifests));
+fs.writeFileSync(path.join(generatedOutput, 'slot-loaders.js'), renderSlotLoaders(contracts, mobileFrontendContract));
+writeDeterministicJson(path.join(generatedOutput, 'license-inventory.json'), makeLicenseInventory(contracts));
 writeDeterministicJson(path.join(generatedOutput, 'state.json'), {
   schema: 1,
   slots: Object.fromEntries(SLOT_NAMES.map((slot) => [slot, {
     commit: lock.slots[slot].commit,
-    id: manifests[slot].id,
-    entry: manifests[slot].entry
+    id: contracts[slot].id,
+    component: contracts[slot].adapter || contracts[slot].entry,
+    componentOwner: contracts[slot].adapter ? 'composition' : 'repository'
   }]))
 });
 writeDeterministicJson(lockPath, lock);
-console.log(`Composed ${manifests.desktop.id} + ${manifests.mobile.id}.`);
+console.log(`Composed ${contracts.desktop.id} + ${contracts.mobile.id}.`);
