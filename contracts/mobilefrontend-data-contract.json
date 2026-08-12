@@ -4,5 +4,9 @@
   "dataSchema": "thetree-mobilefrontend/v1",
   "modeField": "mode",
   "desktopMode": "desktop",
-  "mobileMode": "mobile"
+  "mobileMode": "mobile",
+  "composedConfigDataKey": "thetreeComposedSkinConfig",
+  "composedConfigSchema": "thetree-composed-skin-config/v1",
+  "composerRuntimeSchema": "thetree-skin-composer-runtime/v1",
+  "composerRuntimeContract": ".skin-composer/generated/runtime-contract.json"
 }
