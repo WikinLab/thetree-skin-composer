@@ -19,7 +19,8 @@ import {
 import { resolveCompositionSlot } from '../lib/resolveCompositionSlot.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const composition = validateComposition(JSON.parse(fs.readFileSync(path.join(root, 'COMPOSITION.json'), 'utf8')));
+const composition = validateComposition(JSON.parse(fs.readFileSync(path.join(root, 'COMPOSITION.example.json'), 'utf8')));
+assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /^\/COMPOSITION\.json$/m);
 const mobileFrontendContract = JSON.parse(fs.readFileSync(path.join(root, 'contracts', 'mobilefrontend-data-contract.json'), 'utf8'));
 assert.deepEqual(Object.keys(composition.slots), ['desktop', 'mobile']);
 assert.equal(composition.slots.desktop.contract, undefined);
@@ -106,6 +107,7 @@ assert.doesNotMatch(implementation, /vector|minerva/i, 'Composer implementation 
 assert.match(implementation, /COMPOSABLE-SKIN/, 'Composer should accept optional child self-description.');
 assert.match(implementation, /inferNativeSlotContract/, 'Composer must support unmodified native skins.');
 assert.doesNotMatch(bootstrapSource, /COMPOSITION-LOCK|--refresh/, 'Bootstrap must resolve current slot refs instead of consuming a tracked lock.');
+assert.match(bootstrapSource, /COMPOSITION\.example\.json/, 'Missing local composition guidance must point to the tracked example.');
 assert.match(bootstrapSource, /makeCompositionResolution\(composition, resolveHead\)/);
 assert.ok(
   bootstrapSource.indexOf('runSlotPrepare(slotRoot, contracts[slot])') < bootstrapSource.indexOf('const componentPath ='),

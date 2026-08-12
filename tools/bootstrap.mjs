@@ -27,6 +27,10 @@ const generatedOutput = path.join(generatedRoot, 'generated');
 const compositionPath = path.join(root, 'COMPOSITION.json');
 const mobileFrontendContractPath = path.join(root, 'contracts', 'mobilefrontend-data-contract.json');
 
+if (!fs.existsSync(compositionPath)) {
+  throw new Error('COMPOSITION.json is missing. Copy COMPOSITION.example.json to COMPOSITION.json and configure both slots.');
+}
+
 function run(command, args, cwd = root, env = process.env) {
   const result = spawnSync(command, args, { cwd, env, stdio: 'inherit', windowsHide: true, shell: false });
   if (result.error) throw result.error;

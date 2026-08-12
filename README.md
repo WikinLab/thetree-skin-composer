@@ -20,8 +20,22 @@ the tree에서 서로 다른 데스크톱 스킨과 모바일 스킨을 하나�
 
 ## 설치
 
-1. 이 저장소를 포크하거나 복사하여 사용할 조합 저장소를 만듭니다.
-2. 조합 저장소의 `COMPOSITION.json`에 데스크톱·모바일 스킨 저장소를 지정합니다.
+1. the tree에서 **관리자 → 개발자 설정 → 스킨**으로 이동합니다.
+2. 원하는 스킨 이름과 다음 저장소 URL을 입력하고 **추가**를 누릅니다.
+
+   ```text
+   https://github.com/WikinLab/thetree-skin-composer
+   ```
+
+3. 생성된 `frontend/skins/설치한-스킨-이름` 폴더에서 `COMPOSITION.example.json`을 `COMPOSITION.json`으로 복사합니다.
+
+   ```powershell
+   Copy-Item COMPOSITION.example.json COMPOSITION.json
+   ```
+
+   Linux에서는 `cp COMPOSITION.example.json COMPOSITION.json`을 사용합니다.
+
+4. `COMPOSITION.json`을 열어 데스크톱·모바일 슬롯의 `repository`와 `ref`를 입력합니다.
 
    ```json
    {
@@ -39,17 +53,17 @@ the tree에서 서로 다른 데스크톱 스킨과 모바일 스킨을 하나�
    }
    ```
 
-3. MobileFrontend 플러그인을 설치하고 the tree 엔진을 다시 시작합니다.
-4. the tree에서 **관리자 → 개발자 설정 → 스킨**으로 이동합니다.
-5. 원하는 스킨 이름과 조합 저장소 URL을 입력하고 **추가**를 누릅니다.
-6. the tree 설치 디렉터리에서 다음 명령을 실행합니다.
+   `COMPOSITION.json`은 설치별 로컬 설정으로 유지되며 이후 GUI 업데이트에서도 그대로 보존됩니다.
+
+5. 설치한 스킨 폴더에서 슬롯을 준비합니다.
 
    ```sh
    cd frontend/skins/설치한-스킨-이름
    npm run bootstrap
    ```
 
-7. 관리자 화면에서 해당 스킨의 **빌드**를 누릅니다.
+6. MobileFrontend 플러그인을 설치하고 the tree 엔진을 다시 시작합니다.
+7. **관리자 → 개발자 설정 → 스킨**에서 해당 스킨의 **빌드**를 누릅니다.
 8. 관리자 설정에서 기본 스킨으로 지정하거나 사용자 설정에서 선택합니다.
 
 ## 설정
@@ -62,13 +76,14 @@ the tree에서 서로 다른 데스크톱 스킨과 모바일 스킨을 하나�
 2. 해당 스킨 폴더에서 `npm run bootstrap`을 실행합니다.
 3. 같은 화면에서 **빌드**를 누릅니다.
 
-`npm run bootstrap`은 `COMPOSITION.json`에 지정된 두 슬롯 저장소의 최신 커밋을 반영합니다.
+`npm run bootstrap`은 `COMPOSITION.json`에 지정한 두 슬롯 저장소의 최신 커밋을 반영합니다.
 
 ## 문제 해결
 
 - 모바일 슬롯 전환 확인 순서: MobileFrontend 플러그인 설치 경로 확인 → the tree 엔진 재시작
+- `COMPOSITION.json is missing` 오류가 나오면 예제 파일을 복사하고 두 슬롯을 설정합니다.
 - 슬롯 준비가 중간에 실패하면 `.skin-composer` 폴더를 삭제하고 `npm run bootstrap`을 다시 실행합니다.
-- 자식 스킨의 준비 명령과 진입점은 해당 스킨 또는 조합 저장소의 슬롯 설정에서 확인합니다.
+- 자식 스킨 준비 오류는 `COMPOSITION.json`의 저장소 URL과 ref부터 확인합니다.
 - Windows에서 `Filename too long` 오류가 나오면 관리자 권한 터미널에서 `git config --system core.longpaths true`를 실행합니다.
 
 ## 면책
