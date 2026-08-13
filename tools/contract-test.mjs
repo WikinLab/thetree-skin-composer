@@ -4,12 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  discoverNativeConfigNamespaces,
   makeCompositionResolution,
   makeLicenseInventory,
   makeRuntimeContract,
   normalizeComposableSkin,
   inferNativeSlotContract,
   packageManagerScriptMatches,
+  readCompositionConfigNamespaces,
   renderSlotLoaders,
   resolveContainedPath,
   validateComposition,
@@ -68,13 +70,50 @@ const inferredRoot = path.join(root, '.contract-fixture-native');
 fs.mkdirSync(inferredRoot, { recursive: true });
 try {
   fs.writeFileSync(path.join(inferredRoot, 'package.json'), '{"name":"native-fixture","license":"MIT"}\n');
+  fs.writeFileSync(path.join(inferredRoot, 'layout.vue'), [
+    '<template><nuxt /></template>',
+    `<script>const unrelated = 'skin.unrelated.color';`,
+    `const color = config['skin.native.brand_color'];`,
+    `const ambiguous = config['skin.nested.group.color'];`,
+    `// const ignoredComment = config['skin.comment.color'];`,
+    `/* const ignoredBlock = config['skin.block.color']; */</script>`,
+    ''
+  ].join('\n'));
+  fs.mkdirSync(path.join(inferredRoot, 'tests'));
+  fs.writeFileSync(path.join(inferredRoot, 'tests', 'ignored.test.js'), `const ignored = 'skin.ignored.color';\n`);
+  assert.deepEqual(discoverNativeConfigNamespaces(inferredRoot), ['skin.native']);
   assert.deepEqual(inferNativeSlotContract(inferredRoot, 'desktop'), {
     schema: 'thetree-skin-slot-contract/v1', id: 'native-fixture', entry: 'layout.vue',
-    contentSurface: 'host', configNamespaces: [], sharedConfigKeys: [], license: 'MIT'
+    contentSurface: 'host', configNamespaces: ['skin.native'], sharedConfigKeys: [], license: 'MIT'
   });
+  assert.throws(
+    () => inferNativeSlotContract(inferredRoot, 'desktop', ['skin.wrong']),
+    /source uses skin\.native/
+  );
+  assert.deepEqual(
+    inferNativeSlotContract(inferredRoot, 'desktop', ['skin.dynamic', 'skin.native']).configNamespaces,
+    ['skin.dynamic', 'skin.native']
+  );
 } finally {
   fs.rmSync(inferredRoot, { recursive: true, force: true });
 }
+const unresolvedRoot = path.join(root, '.contract-fixture-unresolved');
+fs.mkdirSync(unresolvedRoot, { recursive: true });
+try {
+  fs.writeFileSync(path.join(unresolvedRoot, 'layout.vue'), '<template><nuxt /></template>\n');
+  assert.throws(() => inferNativeSlotContract(unresolvedRoot, 'mobile'), /config namespace could not be discovered/);
+  assert.deepEqual(inferNativeSlotContract(unresolvedRoot, 'mobile', []).configNamespaces, []);
+  assert.deepEqual(inferNativeSlotContract(unresolvedRoot, 'mobile', ['skin.manual']).configNamespaces, ['skin.manual']);
+} finally {
+  fs.rmSync(unresolvedRoot, { recursive: true, force: true });
+}
+assert.deepEqual(readCompositionConfigNamespaces({ configSkin: 'liberty' }, 'desktop'), ['skin.liberty']);
+assert.deepEqual(readCompositionConfigNamespaces({ configSkin: 'skin.liberty' }, 'desktop'), ['skin.liberty']);
+assert.deepEqual(readCompositionConfigNamespaces({ configNamespaces: [] }, 'mobile'), []);
+assert.throws(
+  () => readCompositionConfigNamespaces({ configSkin: 'liberty', configNamespaces: [] }, 'desktop'),
+  /only one/
+);
 assert.deepEqual(validateConfigBoundaries(contracts), { 'skin.mobile': ['mobile'] });
 assert.deepEqual(validateConfigBoundaries({
   desktop: { ...contracts.desktop, configNamespaces: ['skin.shared'] },

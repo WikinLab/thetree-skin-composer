@@ -11,6 +11,7 @@ import {
   normalizeComposableSkin,
   inferNativeSlotContract,
   packageManagerScriptMatches,
+  readCompositionConfigNamespaces,
   readJson,
   renderSlotLoaders,
   resolveContainedPath,
@@ -71,14 +72,14 @@ function cloneExact(repository, commit, target) {
 }
 
 function resolveSlotContract(source, slotRoot, slot) {
+  const selfDescriptionPath = path.join(slotRoot, 'COMPOSABLE-SKIN.json');
+  if (fs.existsSync(selfDescriptionPath)) return normalizeComposableSkin(readJson(selfDescriptionPath), slot);
   if (source.contract) {
     const contractPath = resolveContainedPath(root, source.contract, `${slot} contract path`);
     if (!fs.existsSync(contractPath)) throw new Error(`${slot} external slot contract is missing.`);
     return validateSlotContract(readJson(contractPath), slot);
   }
-  const selfDescriptionPath = path.join(slotRoot, 'COMPOSABLE-SKIN.json');
-  if (fs.existsSync(selfDescriptionPath)) return normalizeComposableSkin(readJson(selfDescriptionPath), slot);
-  return inferNativeSlotContract(slotRoot, slot);
+  return inferNativeSlotContract(slotRoot, slot, readCompositionConfigNamespaces(source, slot));
 }
 
 function runSlotPrepare(slotRoot, contract) {
@@ -134,7 +135,8 @@ writeDeterministicJson(path.join(generatedOutput, 'state.json'), {
     commit: resolution.slots[slot].commit,
     id: contracts[slot].id,
     component: contracts[slot].adapter || contracts[slot].entry,
-    componentOwner: contracts[slot].adapter ? 'composition' : 'repository'
+    componentOwner: contracts[slot].adapter ? 'composition' : 'repository',
+    configNamespaces: contracts[slot].configNamespaces
   }]))
 });
 console.log(`Composed ${contracts.desktop.id} + ${contracts.mobile.id}.`);

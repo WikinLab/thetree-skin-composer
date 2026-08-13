@@ -8,6 +8,12 @@ export const COMPOSABLE_SKIN_SCHEMA = 'thetree-composable-skin/v1';
 export const RUNTIME_CONTRACT_SCHEMA = 'thetree-skin-composer-runtime/v1';
 export const SLOT_NAMES = Object.freeze(['desktop', 'mobile']);
 
+const NATIVE_SOURCE_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx', '.vue']);
+const NATIVE_SOURCE_EXCLUDED_DIRECTORIES = new Set([
+  '.git', '.github', '.nuxt', '.skin-composer', 'coverage', 'dist', 'docs', 'node_modules',
+  'test', 'tests', 'tools', 'vendor'
+]);
+
 export function packageManagerScriptMatches(command, executablePath) {
   if (!command || !executablePath) return false;
   const executableName = path.basename(executablePath).toLowerCase()
@@ -30,6 +36,10 @@ export function validateComposition(composition) {
     assertString(value?.repository, `slots.${slot}.repository`);
     assertString(value?.ref, `slots.${slot}.ref`);
     if (value?.contract !== undefined) assertRelativePath(value.contract, `slots.${slot}.contract`);
+    const declaredNamespaces = readCompositionConfigNamespaces(value, slot);
+    if (value?.contract !== undefined && declaredNamespaces !== undefined) {
+      throw new Error(`slots.${slot} cannot combine contract with configSkin or configNamespaces.`);
+    }
   }
   return composition;
 }
@@ -129,15 +139,147 @@ export function normalizeComposableSkin(manifest, slot) {
   }, slot);
 }
 
-export function inferNativeSlotContract(slotRoot, slot) {
+function normalizeConfigNamespace(value, label) {
+  const namespace = assertString(value, label);
+  if (!/^skin\.[a-z0-9](?:[a-z0-9_-]*\.?)*$/i.test(namespace)) {
+    throw new Error(`${label} must be a skin.* namespace.`);
+  }
+  return namespace;
+}
+
+export function readCompositionConfigNamespaces(source, slot) {
+  const hasConfigSkin = Object.prototype.hasOwnProperty.call(source || {}, 'configSkin');
+  const hasConfigNamespaces = Object.prototype.hasOwnProperty.call(source || {}, 'configNamespaces');
+  if (hasConfigSkin && hasConfigNamespaces) {
+    throw new Error(`slots.${slot} must declare only one of configSkin or configNamespaces.`);
+  }
+  if (hasConfigSkin) {
+    const value = assertString(source.configSkin, `slots.${slot}.configSkin`);
+    return [normalizeConfigNamespace(/^skin\./i.test(value) ? value : `skin.${value}`, `slots.${slot}.configSkin`)];
+  }
+  if (hasConfigNamespaces) {
+    if (!Array.isArray(source.configNamespaces)) {
+      throw new Error(`slots.${slot}.configNamespaces must be an array.`);
+    }
+    return [...new Set(source.configNamespaces.map((namespace) => (
+      normalizeConfigNamespace(namespace, `slots.${slot}.configNamespaces entry`)
+    )))].sort();
+  }
+  return undefined;
+}
+
+function isNativeRuntimeSource(filename) {
+  const extension = path.extname(filename).toLowerCase();
+  const basename = path.basename(filename).toLowerCase();
+  return NATIVE_SOURCE_EXTENSIONS.has(extension)
+    && !/(?:^|[.-])(?:spec|test)(?:[.-]|$)/.test(basename);
+}
+
+function collectNativeRuntimeSources(root, current = root, files = []) {
+  const entries = fs.readdirSync(current, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name, 'en'));
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) continue;
+    const filename = path.join(current, entry.name);
+    if (entry.isDirectory()) {
+      if (!NATIVE_SOURCE_EXCLUDED_DIRECTORIES.has(entry.name.toLowerCase())) {
+        collectNativeRuntimeSources(root, filename, files);
+      }
+      continue;
+    }
+    if (entry.isFile() && isNativeRuntimeSource(filename) && fs.statSync(filename).size <= 2 * 1024 * 1024) {
+      files.push(filename);
+    }
+  }
+  return files;
+}
+
+function stripSourceComments(source) {
+  let output = '';
+  let quote = '';
+  let escaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (quote) {
+      output += character;
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = '';
+      continue;
+    }
+    if (character === '\'' || character === '"' || character === '`') {
+      quote = character;
+      output += character;
+      continue;
+    }
+    if (character === '<' && source.slice(index, index + 4) === '<!--') {
+      const end = source.indexOf('-->', index + 4);
+      if (end === -1) break;
+      output += '\n'.repeat(source.slice(index, end + 3).split('\n').length - 1);
+      index = end + 2;
+      continue;
+    }
+    if (character === '/' && next === '*') {
+      const end = source.indexOf('*/', index + 2);
+      if (end === -1) break;
+      output += '\n'.repeat(source.slice(index, end + 2).split('\n').length - 1);
+      index = end + 1;
+      continue;
+    }
+    if (character === '/' && next === '/') {
+      const end = source.indexOf('\n', index + 2);
+      if (end === -1) break;
+      output += '\n';
+      index = end;
+      continue;
+    }
+    output += character;
+  }
+  return output;
+}
+
+export function discoverNativeConfigNamespaces(slotRoot) {
+  const namespaces = new Set();
+  const configAccessPattern = /\bconfig\s*(?:\?\.)?\s*\[\s*(['"`])skin\.([a-z0-9][a-z0-9_-]*)\.([a-z0-9][a-z0-9_.-]*)\1\s*\]/gi;
+  for (const filename of collectNativeRuntimeSources(slotRoot)) {
+    const source = stripSourceComments(fs.readFileSync(filename, 'utf8'));
+    for (const match of source.matchAll(configAccessPattern)) {
+      if (!match[3].includes('.')) namespaces.add(`skin.${match[2]}`);
+    }
+  }
+  return [...namespaces].sort();
+}
+
+export function inferNativeSlotContract(slotRoot, slot, declaredConfigNamespaces = undefined) {
   const packagePath = path.join(slotRoot, 'package.json');
   const packageData = fs.existsSync(packagePath) ? readJson(packagePath) : {};
+  const discoveredConfigNamespaces = discoverNativeConfigNamespaces(slotRoot);
+  if (!discoveredConfigNamespaces.length && declaredConfigNamespaces === undefined) {
+    throw new Error(
+      `${slot} slot has no COMPOSABLE-SKIN.json and its config namespace could not be discovered from runtime source. `
+      + `Declare slots.${slot}.configSkin, or declare slots.${slot}.configNamespaces as [] when the skin uses no skin-specific config.`
+    );
+  }
+  if (declaredConfigNamespaces !== undefined) {
+    const missingDiscoveries = discoveredConfigNamespaces.filter(
+      (namespace) => !declaredConfigNamespaces.includes(namespace)
+    );
+    if (missingDiscoveries.length) {
+      throw new Error(
+        `${slot} slot source uses ${missingDiscoveries.join(', ')}, but the composition config declaration does not include it.`
+      );
+    }
+  }
+  const configNamespaces = declaredConfigNamespaces === undefined
+    ? discoveredConfigNamespaces
+    : [...new Set(declaredConfigNamespaces)].sort();
   return validateSlotContract({
     schema: SLOT_CONTRACT_SCHEMA,
     id: packageData.name || `native-${slot}`,
     entry: 'layout.vue',
     contentSurface: 'host',
-    configNamespaces: [],
+    configNamespaces,
     sharedConfigKeys: [],
     license: packageData.license || 'UNKNOWN'
   }, slot);

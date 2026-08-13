@@ -70,6 +70,20 @@ the tree에서 서로 다른 데스크톱 스킨과 모바일 스킨을 하나�
 
 각 슬롯 스킨의 README에 명시된 설정 키를 그대로 사용합니다.
 
+컴포저는 슬롯 저장소의 `COMPOSABLE-SKIN.json`을 먼저 사용합니다. 해당 파일이 없는 네이티브 스킨은 실행 소스에 선언된 `skin.*` 설정 키를 자동으로 찾습니다.
+
+자동으로 찾을 수 없는 동적 설정 키를 사용하는 스킨은 오류 메시지에 따라 해당 슬롯에 `configSkin`을 추가합니다.
+
+```json
+{
+  "repository": "https://github.com/example/custom-skin.git",
+  "ref": "refs/heads/main",
+  "configSkin": "custom"
+}
+```
+
+스킨 전용 설정 키를 사용하지 않는 스킨은 해당 슬롯에 `"configNamespaces": []`를 지정합니다.
+
 ## 업데이트
 
 1. **관리자 → 개발자 설정 → 스킨 → 설치한 이름**에서 **업데이트**를 누릅니다.
