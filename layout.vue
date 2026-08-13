@@ -3,8 +3,9 @@
 </template>
 
 <script>
-import { mobileFrontendContract, slotComponents } from './.skin-composer/generated/slot-loaders.js';
+import { mobileFrontendContract, slotComponents, slotConfigBindings } from './.skin-composer/generated/slot-loaders.js';
 import { resolveCompositionSlot } from './lib/resolveCompositionSlot.js';
+import { applyComposedConfig } from './lib/applyComposedConfig.js';
 
 export default {
   name: 'TheTreeComposedSkin',
@@ -26,6 +27,9 @@ export default {
       handler(payload) {
         this.applyComposedConfig(payload);
       }
+    },
+    activeSlot() {
+      this.applyComposedConfig(this.$store.state.page?.data?.thetreeComposedSkinConfig);
     }
   },
   methods: {
@@ -33,21 +37,16 @@ export default {
       const state = this.$store?.state;
       if (!state?.config) return;
       state.$patch((current) => {
-        for (const key of this.composedConfigKeys) {
-          if (this.composedConfigBase.has(key)) current.config[key] = this.composedConfigBase.get(key);
-          else delete current.config[key];
-        }
-        this.composedConfigBase = new Map();
-        this.composedConfigKeys = [];
-        if (payload?.schema !== 'thetree-composed-skin-config/v1' || !payload.values || Array.isArray(payload.values)) return;
-        for (const [key, value] of Object.entries(payload.values)) {
-          const namespaced = payload.configNamespaces?.some((namespace) => key.startsWith(`${namespace}.`));
-          const shared = payload.sharedConfigKeys?.includes(key);
-          if (!namespaced && !shared) continue;
-          if (Object.prototype.hasOwnProperty.call(current.config, key)) this.composedConfigBase.set(key, current.config[key]);
-          current.config[key] = value;
-          this.composedConfigKeys.push(key);
-        }
+        const result = applyComposedConfig({
+          config: current.config,
+          payload,
+          binding: slotConfigBindings[this.activeSlot],
+          hostSkinName: __THETREE_SKIN_NAME__,
+          previousBase: this.composedConfigBase,
+          previousKeys: this.composedConfigKeys
+        });
+        this.composedConfigBase = result.base;
+        this.composedConfigKeys = result.keys;
       });
     }
   }

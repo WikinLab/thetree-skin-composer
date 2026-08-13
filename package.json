@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "thetree-skin-composer",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Engine-neutral desktop/mobile skin slot composer for the tree",
   "type": "module",
   "scripts": {

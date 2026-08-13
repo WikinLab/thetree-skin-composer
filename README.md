@@ -70,9 +70,14 @@ the tree에서 서로 다른 데스크톱 스킨과 모바일 스킨을 하나�
 
 각 슬롯 스킨의 README에 명시된 설정 키를 그대로 사용합니다.
 
-컴포저는 슬롯 저장소의 `COMPOSABLE-SKIN.json`을 먼저 사용합니다. 해당 파일이 없는 네이티브 스킨은 실행 소스에 선언된 `skin.*` 설정 키를 자동으로 찾습니다.
+컴포저는 슬롯 저장소의 `COMPOSABLE-SKIN.json`을 먼저 사용합니다. 해당 파일이 없는 네이티브 스킨은 실행 소스에서 다음 설정 방식을 자동으로 찾습니다.
 
-자동으로 찾을 수 없는 동적 설정 키를 사용하는 스킨은 오류 메시지에 따라 해당 슬롯에 `configSkin`을 추가합니다.
+- `skin.liberty.*`처럼 고정된 스킨 설정
+- `skin.${__THETREE_SKIN_NAME__}.*`처럼 설치한 스킨 이름에 연동된 설정
+
+설치 이름에 연동된 스킨은 조합 전용 `skin.설치한-이름.*` 설정을 우선 사용하고, 값이 없으면 원래 스킨의 `skin.원래-이름.*` 설정을 사용합니다.
+
+고정 설정 이름을 자동으로 찾을 수 없는 스킨은 오류 메시지에 따라 해당 슬롯에 `configSkin`을 추가합니다.
 
 ```json
 {
@@ -83,6 +88,22 @@ the tree에서 서로 다른 데스크톱 스킨과 모바일 스킨을 하나�
 ```
 
 스킨 전용 설정 키를 사용하지 않는 스킨은 해당 슬롯에 `"configNamespaces": []`를 지정합니다.
+
+설치 이름에 연동되는 동적 설정을 자동으로 찾을 수 없는 스킨은 다음과 같이 원래 설정 이름을 지정합니다.
+
+```json
+{
+  "repository": "https://github.com/example/custom-skin.git",
+  "ref": "refs/heads/main",
+  "configBinding": {
+    "usesHostNamespace": true,
+    "hostFallbackNamespaces": ["skin.custom"]
+  }
+}
+```
+
+고정 설정과 설치 이름 연동 설정을 함께 쓰는 스킨은 `fixedNamespaces`와 `hostFallbackNamespaces`를 함께 지정할 수 있습니다.
+`hostFallbackNamespaces`가 여러 개이면 앞에 적은 네임스페이스가 우선합니다.
 
 ## 업데이트
 

@@ -36,9 +36,9 @@ export function validateComposition(composition) {
     assertString(value?.repository, `slots.${slot}.repository`);
     assertString(value?.ref, `slots.${slot}.ref`);
     if (value?.contract !== undefined) assertRelativePath(value.contract, `slots.${slot}.contract`);
-    const declaredNamespaces = readCompositionConfigNamespaces(value, slot);
-    if (value?.contract !== undefined && declaredNamespaces !== undefined) {
-      throw new Error(`slots.${slot} cannot combine contract with configSkin or configNamespaces.`);
+    const declaredBinding = readCompositionConfigBinding(value, slot);
+    if (value?.contract !== undefined && declaredBinding !== undefined) {
+      throw new Error(`slots.${slot} cannot combine contract with configSkin, configNamespaces, or configBinding.`);
     }
   }
   return composition;
@@ -107,6 +107,16 @@ export function validateSlotContract(contract, slot) {
       throw new Error(`${slot} shared config key must be an exact public wiki.* key.`);
     }
   });
+  const configBinding = normalizeConfigBinding(contract.configBinding || {
+    fixedNamespaces: contract.configNamespaces,
+    hostFallbackNamespaces: []
+  }, `${slot} config binding`);
+  const bindingNamespaces = [
+    ...configBinding.fixedNamespaces,
+    ...configBinding.hostFallbackNamespaces
+  ];
+  contract.configNamespaces = [...new Set([...contract.configNamespaces, ...bindingNamespaces])].sort();
+  contract.configBinding = configBinding;
   assertString(contract.license, `${slot} slot license`);
   if (contract.prepare !== undefined) {
     if (!Array.isArray(contract.prepare) || !contract.prepare.length) {
@@ -134,6 +144,7 @@ export function normalizeComposableSkin(manifest, slot) {
     contentSurface: manifest.contentSurface,
     configNamespaces: manifest.configNamespaces || [],
     sharedConfigKeys: manifest.sharedConfigKeys || [],
+    ...(manifest.configBinding ? { configBinding: manifest.configBinding } : {}),
     license: manifest.license,
     ...(prepare ? { prepare } : {})
   }, slot);
@@ -147,25 +158,81 @@ function normalizeConfigNamespace(value, label) {
   return namespace;
 }
 
-export function readCompositionConfigNamespaces(source, slot) {
+function normalizeConfigNamespaces(value, label, { sort = true } = {}) {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`);
+  const namespaces = [...new Set(value.map((namespace) => normalizeConfigNamespace(namespace, `${label} entry`)))];
+  return sort ? namespaces.sort() : namespaces;
+}
+
+export function normalizeConfigBinding(binding, label) {
+  if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  if (binding.mode !== undefined) {
+    if (!['fixed', 'host', 'none'].includes(binding.mode)) {
+      throw new Error(`${label}.mode must be fixed, host, or none.`);
+    }
+    const namespaces = binding.mode === 'none'
+      ? normalizeConfigNamespaces(binding.namespaces || [], `${label}.namespaces`)
+      : normalizeConfigNamespaces(binding.namespaces, `${label}.namespaces`, { sort: binding.mode !== 'host' });
+    if (binding.mode !== 'none' && !namespaces.length) {
+      throw new Error(`${label}.namespaces must not be empty for ${binding.mode} mode.`);
+    }
+    if (binding.mode === 'none' && namespaces.length) {
+      throw new Error(`${label}.namespaces must be empty for none mode.`);
+    }
+    return {
+      fixedNamespaces: binding.mode === 'fixed' ? namespaces : [],
+      usesHostNamespace: binding.mode === 'host',
+      hostFallbackNamespaces: binding.mode === 'host' ? namespaces : []
+    };
+  }
+  const fixedNamespaces = normalizeConfigNamespaces(binding.fixedNamespaces || [], `${label}.fixedNamespaces`);
+  const hostFallbackNamespaces = normalizeConfigNamespaces(
+    binding.hostFallbackNamespaces || [],
+    `${label}.hostFallbackNamespaces`,
+    { sort: false }
+  );
+  if (binding.usesHostNamespace !== undefined && typeof binding.usesHostNamespace !== 'boolean') {
+    throw new Error(`${label}.usesHostNamespace must be a boolean.`);
+  }
+  if (binding.usesHostNamespace === false && hostFallbackNamespaces.length) {
+    throw new Error(`${label}.usesHostNamespace cannot be false when hostFallbackNamespaces are declared.`);
+  }
+  const usesHostNamespace = binding.usesHostNamespace === true || hostFallbackNamespaces.length > 0;
+  return { fixedNamespaces, usesHostNamespace, hostFallbackNamespaces };
+}
+
+function configBindingNamespaces(binding) {
+  return [...new Set([...binding.fixedNamespaces, ...binding.hostFallbackNamespaces])].sort();
+}
+
+export function readCompositionConfigBinding(source, slot) {
   const hasConfigSkin = Object.prototype.hasOwnProperty.call(source || {}, 'configSkin');
   const hasConfigNamespaces = Object.prototype.hasOwnProperty.call(source || {}, 'configNamespaces');
-  if (hasConfigSkin && hasConfigNamespaces) {
-    throw new Error(`slots.${slot} must declare only one of configSkin or configNamespaces.`);
+  const hasConfigBinding = Object.prototype.hasOwnProperty.call(source || {}, 'configBinding');
+  if ([hasConfigSkin, hasConfigNamespaces, hasConfigBinding].filter(Boolean).length > 1) {
+    throw new Error(`slots.${slot} must declare only one of configSkin, configNamespaces, or configBinding.`);
   }
   if (hasConfigSkin) {
     const value = assertString(source.configSkin, `slots.${slot}.configSkin`);
-    return [normalizeConfigNamespace(/^skin\./i.test(value) ? value : `skin.${value}`, `slots.${slot}.configSkin`)];
+    return {
+      fixedNamespaces: [normalizeConfigNamespace(/^skin\./i.test(value) ? value : `skin.${value}`, `slots.${slot}.configSkin`)],
+      usesHostNamespace: false,
+      hostFallbackNamespaces: []
+    };
   }
   if (hasConfigNamespaces) {
-    if (!Array.isArray(source.configNamespaces)) {
-      throw new Error(`slots.${slot}.configNamespaces must be an array.`);
-    }
-    return [...new Set(source.configNamespaces.map((namespace) => (
-      normalizeConfigNamespace(namespace, `slots.${slot}.configNamespaces entry`)
-    )))].sort();
+    const namespaces = normalizeConfigNamespaces(source.configNamespaces, `slots.${slot}.configNamespaces`);
+    return { fixedNamespaces: namespaces, usesHostNamespace: false, hostFallbackNamespaces: [] };
   }
+  if (hasConfigBinding) return normalizeConfigBinding(source.configBinding, `slots.${slot}.configBinding`);
   return undefined;
+}
+
+export function readCompositionConfigNamespaces(source, slot) {
+  const binding = readCompositionConfigBinding(source, slot);
+  return binding && configBindingNamespaces(binding);
 }
 
 function isNativeRuntimeSource(filename) {
@@ -251,29 +318,94 @@ export function discoverNativeConfigNamespaces(slotRoot) {
   return [...namespaces].sort();
 }
 
-export function inferNativeSlotContract(slotRoot, slot, declaredConfigNamespaces = undefined) {
+export function discoverNativeHostConfigBinding(slotRoot) {
+  let usesBuildSkinName = false;
+  let hasHostPrefix = false;
+  let hasDirectHostPrefix = false;
+  const defaultNames = new Set();
+  const buildNamePattern = /\b(?:const|let|var)\s+([a-z_$][\w$]*)\s*=\s*typeof\s+__THETREE_SKIN_NAME__\s*===?\s*(['"])undefined\2\s*\?\s*(['"])([a-z0-9_-]+)\3\s*:\s*__THETREE_SKIN_NAME__/gi;
+  const directBuildNamePattern = /\b(?:const|let|var)\s+([a-z_$][\w$]*)\s*=\s*__THETREE_SKIN_NAME__\b/gi;
+  const directPrefixPattern = /`skin\.\$\{\s*__THETREE_SKIN_NAME__\s*\}\.`/g;
+  const dynamicPrefixPattern = /(?:`skin\.\$\{[^}]+\}\.`|(['"])skin\.\1\s*\+[^\n;]+\+\s*(['"])\.\2)/;
+  const variablePrefixes = new Set();
+  for (const filename of collectNativeRuntimeSources(slotRoot)) {
+    const source = stripSourceComments(fs.readFileSync(filename, 'utf8'));
+    if (directPrefixPattern.test(source)) {
+      hasHostPrefix = true;
+      hasDirectHostPrefix = true;
+    }
+    directPrefixPattern.lastIndex = 0;
+    for (const match of source.matchAll(buildNamePattern)) {
+      usesBuildSkinName = true;
+      variablePrefixes.add(match[1]);
+      defaultNames.add(match[4]);
+    }
+    for (const match of source.matchAll(directBuildNamePattern)) {
+      usesBuildSkinName = true;
+      variablePrefixes.add(match[1]);
+    }
+  }
+  if (usesBuildSkinName) {
+    for (const filename of collectNativeRuntimeSources(slotRoot)) {
+      const source = stripSourceComments(fs.readFileSync(filename, 'utf8'));
+      for (const variable of variablePrefixes) {
+        const escaped = variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const prefixPattern = new RegExp(`(?:create[A-Za-z0-9_$]*Config\\s*\\([^,]+,\\s*${escaped}\\s*\\)|skin\\.\\$\\{[^}]*${escaped}[^}]*\\}\\.)`);
+        if (prefixPattern.test(source)) hasHostPrefix = true;
+      }
+    }
+  }
+  return {
+    detected: hasHostPrefix && (usesBuildSkinName || hasDirectHostPrefix),
+    namespaces: [...defaultNames].map((name) => `skin.${name}`).sort(),
+    ambiguous: !hasHostPrefix && collectNativeRuntimeSources(slotRoot).some((filename) => {
+      const source = stripSourceComments(fs.readFileSync(filename, 'utf8'));
+      return dynamicPrefixPattern.test(source);
+    })
+  };
+}
+
+export function inferNativeSlotContract(slotRoot, slot, declaredConfigBinding = undefined) {
   const packagePath = path.join(slotRoot, 'package.json');
   const packageData = fs.existsSync(packagePath) ? readJson(packagePath) : {};
   const discoveredConfigNamespaces = discoverNativeConfigNamespaces(slotRoot);
-  if (!discoveredConfigNamespaces.length && declaredConfigNamespaces === undefined) {
+  const discoveredHostBinding = discoverNativeHostConfigBinding(slotRoot);
+  if (discoveredHostBinding.detected && !discoveredHostBinding.namespaces.length
+    && declaredConfigBinding === undefined) {
     throw new Error(
-      `${slot} slot has no COMPOSABLE-SKIN.json and its config namespace could not be discovered from runtime source. `
-      + `Declare slots.${slot}.configSkin, or declare slots.${slot}.configNamespaces as [] when the skin uses no skin-specific config.`
+      `${slot} slot uses the installed skin name for config, but its original fallback namespace could not be discovered. `
+      + `Declare slots.${slot}.configBinding.hostFallbackNamespaces, or declare an empty list to use only skin.<installed-name>.* config.`
     );
   }
-  if (declaredConfigNamespaces !== undefined) {
-    const missingDiscoveries = discoveredConfigNamespaces.filter(
-      (namespace) => !declaredConfigNamespaces.includes(namespace)
+  const discoveredBinding = discoveredHostBinding.detected || discoveredConfigNamespaces.length
+    ? {
+      fixedNamespaces: discoveredConfigNamespaces,
+      usesHostNamespace: discoveredHostBinding.detected,
+      hostFallbackNamespaces: discoveredHostBinding.detected ? discoveredHostBinding.namespaces : []
+    }
+    : undefined;
+  if ((discoveredHostBinding.ambiguous || !discoveredBinding) && declaredConfigBinding === undefined) {
+    throw new Error(
+      `${slot} slot has no COMPOSABLE-SKIN.json and its config binding could not be determined safely from runtime source. `
+      + `Declare slots.${slot}.configBinding, slots.${slot}.configSkin, or slots.${slot}.configNamespaces as [] when the skin uses no skin-specific config.`
     );
-    if (missingDiscoveries.length) {
+  }
+  if (declaredConfigBinding !== undefined && discoveredBinding !== undefined) {
+    const missingFixed = discoveredBinding.fixedNamespaces.filter(
+      (namespace) => !declaredConfigBinding.fixedNamespaces.includes(namespace)
+    );
+    const missingHost = discoveredBinding.hostFallbackNamespaces.filter(
+      (namespace) => !declaredConfigBinding.hostFallbackNamespaces.includes(namespace)
+    );
+    if (missingFixed.length || missingHost.length
+      || (discoveredBinding.usesHostNamespace && !declaredConfigBinding.usesHostNamespace)) {
       throw new Error(
-        `${slot} slot source uses ${missingDiscoveries.join(', ')}, but the composition config declaration does not include it.`
+        `${slot} slot source config binding is not fully represented by the composition declaration.`
       );
     }
   }
-  const configNamespaces = declaredConfigNamespaces === undefined
-    ? discoveredConfigNamespaces
-    : [...new Set(declaredConfigNamespaces)].sort();
+  const configBinding = declaredConfigBinding || discoveredBinding;
+  const configNamespaces = configBindingNamespaces(configBinding);
   return validateSlotContract({
     schema: SLOT_CONTRACT_SCHEMA,
     id: packageData.name || `native-${slot}`,
@@ -281,6 +413,7 @@ export function inferNativeSlotContract(slotRoot, slot, declaredConfigNamespaces
     contentSurface: 'host',
     configNamespaces,
     sharedConfigKeys: [],
+    configBinding,
     license: packageData.license || 'UNKNOWN'
   }, slot);
 }
@@ -303,6 +436,7 @@ export function renderSlotLoaders(contracts, mobileFrontendContract) {
     '/* @generated by tools/bootstrap.mjs; do not hand-edit. */',
     "import { defineAsyncComponent } from 'vue';",
     `export const mobileFrontendContract = Object.freeze(${JSON.stringify(mobileFrontendContract)});`,
+    `export const slotConfigBindings = Object.freeze(${JSON.stringify(Object.fromEntries(SLOT_NAMES.map((slot) => [slot, contracts[slot].configBinding])))});`,
     'export const slotComponents = Object.freeze({'
   ];
   SLOT_NAMES.forEach((slot, index) => {

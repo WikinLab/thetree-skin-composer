@@ -11,7 +11,7 @@ import {
   normalizeComposableSkin,
   inferNativeSlotContract,
   packageManagerScriptMatches,
-  readCompositionConfigNamespaces,
+  readCompositionConfigBinding,
   readJson,
   renderSlotLoaders,
   resolveContainedPath,
@@ -79,7 +79,7 @@ function resolveSlotContract(source, slotRoot, slot) {
     if (!fs.existsSync(contractPath)) throw new Error(`${slot} external slot contract is missing.`);
     return validateSlotContract(readJson(contractPath), slot);
   }
-  return inferNativeSlotContract(slotRoot, slot, readCompositionConfigNamespaces(source, slot));
+  return inferNativeSlotContract(slotRoot, slot, readCompositionConfigBinding(source, slot));
 }
 
 function runSlotPrepare(slotRoot, contract) {
@@ -136,7 +136,8 @@ writeDeterministicJson(path.join(generatedOutput, 'state.json'), {
     id: contracts[slot].id,
     component: contracts[slot].adapter || contracts[slot].entry,
     componentOwner: contracts[slot].adapter ? 'composition' : 'repository',
-    configNamespaces: contracts[slot].configNamespaces
+    configNamespaces: contracts[slot].configNamespaces,
+    configBinding: contracts[slot].configBinding
   }]))
 });
 console.log(`Composed ${contracts.desktop.id} + ${contracts.mobile.id}.`);
